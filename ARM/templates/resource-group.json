@@ -1,0 +1,51 @@
+{
+    "$schema": "https://schema.management.azure.com/schemas/2019-04-01/subscriptionDeploymentTemplate.json#",
+    "contentVersion": "1.0.0.0",
+    "parameters": {
+        "resourceGroupName": {
+            "type": "string",
+            "metadata": {
+                "description": "Name of the resource group"
+            }
+        },
+        "location": {
+            "type": "string",
+            "defaultValue": "East US",
+            "metadata": {
+                "description": "Location for the resource group"
+            }
+        }
+    },
+    "functions": [],
+    "variables": {
+        "tags": {
+            "Environment": "Lab",
+            "Purpose": "Networking Lab",
+            "Created By": "ARM Template"
+        }
+    },
+    "resources": [
+        {
+            "type": "Microsoft.Resources/resourceGroups",
+            "apiVersion": "2021-09-01",
+            "name": "[parameters('resourceGroupName')]",
+            "location": "[parameters('location')]",
+            "tags": "[variables('tags')]",
+            "properties": {}
+        }
+    ],
+    "outputs": {
+         "resourceGroupName": {
+            "type": "string",
+            "value": "[parameters('resourceGroupName')]"
+         },
+             "resourceGroupId": {
+        "type": "string", 
+        "value": "[resourceId('Microsoft.Resources/resourceGroups', parameters('resourceGroupName'))]"
+             },
+                 "location": {
+        "type": "string",
+        "value": "[parameters('location')]"
+                 }
+    }
+}
