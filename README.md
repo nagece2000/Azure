@@ -25,3 +25,22 @@ New-AzSubscriptionDeployment `
 **Parameters**:
 - resourceGroupName (string): Name of the resource group to create
 - location (string): Azure region `(default: "East US")`
+
+### 1. Virtual Network Template
+**File**: `lab-setup/ARM/templates/virtual-network.json`  
+**Purpose**: Creates VNet with multiple subnets for networking labs 
+**Deployment Level**: Resource Group 
+
+**Deploy Command**:
+```powershell
+New-AzResourceGroupDeployment `
+    -ResourceGroupName "your-rg-name" `
+    -TemplateUri "https://raw.githubusercontent.com/nagece2000/Azure/main/lab-setup/ARM/templates/virtual-network.json" `
+    -vnetName "your-vnet-name"
+```
+
+**Parameters**:
+- vnetName (string): Name of the virtual network
+- vnetAddressSpace (string): VNet CIDR `(default: "10.1.0.0/16")`
+- location (string): Azure region `(default: resource group location)`
+- 
