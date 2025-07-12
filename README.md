@@ -23,4 +23,4 @@ New-AzSubscriptionDeployment `
 ```
 
 **Parameters**:
-resourceGroupName (string): Name of the resource group to create
+- resourceGroupName (string): Name of the resource group to create
