@@ -24,4 +24,4 @@ New-AzSubscriptionDeployment `
 
 **Parameters**:
 - resourceGroupName (string): Name of the resource group to create
-- location (string): Azure region (default: "East US")
+- location (string): Azure region `(default: "East US")`
