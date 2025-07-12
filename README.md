@@ -118,4 +118,17 @@ New-AzResourceGroupDeployment `
   - Private IP: 10.1.1.4 `(web-subnet)`
   - SSH Command: `ssh labadmin@[public-ip]`
 
+## Infrastructure As Code
+- **All resources deployed** using modular ARM templates from GitHub
+- **URL-based deployment** workflow validated
+- **Azure Policy compliance** verified `(VM sizes restricted)`
+
+## Template Status
+- [x] Resource Group template ✅
+- [x] Virtual Network template ✅
+- [x] Storage Account template ✅
+- [x] Virtual Machine template ✅
+- [ ] Network Security Group template (for SSH/security testing)
+- [ ] Complete multi-VM networking lab deployment
+- [ ] VNet Peering configuration
 
