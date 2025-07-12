@@ -121,8 +121,10 @@
     "computerName": "[parameters('vmName')]",
     "adminUsername": "[parameters('adminUsername')]",
     "adminPassword": "[parameters('adminPassword')]",
-    "disablePasswordAuthentication": false
-},
+    "linuxConfiguration": {
+ "disablePasswordAuthentication": false
+    }
+   },
 "storageProfile": {
     "imageReference": {
         "publisher": "Canonical",
