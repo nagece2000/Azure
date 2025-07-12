@@ -21,3 +21,6 @@ New-AzSubscriptionDeployment `
     -TemplateUri "https://raw.githubusercontent.com/nagece2000/Azure/main/lab-setup/ARM/templates/resource-group.json" `
     -resourceGroupName "your-rg-name"
 ```
+
+**Parameters**:
+resourceGroupName (string): Name of the resource group to create
