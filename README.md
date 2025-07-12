@@ -13,3 +13,11 @@ This repository contains ARM templates and scripts for deploying Azure lab envir
 **File**: `lab-setup/ARM/templates/resource-group.json`  
 **Purpose**: Creates resource groups with standardized tags  
 **Deployment Level**: Subscription 
+
+**Deploy Command**:
+```powershell
+New-AzSubscriptionDeployment `
+    -Location "East US" `
+    -TemplateUri "https://raw.githubusercontent.com/nagece2000/Azure/main/lab-setup/ARM/templates/resource-group.json" `
+    -resourceGroupName "your-rg-name"
+```
