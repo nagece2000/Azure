@@ -9,4 +9,4 @@ This repository contains ARM templates and scripts for deploying Azure lab envir
     - **parameters/** - Environment-specific parameter files
     - **scripts/** - Deployment and management scripts
 
-## Available Templates
+### 1. Resource Group Template
