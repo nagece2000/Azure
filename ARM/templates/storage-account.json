@@ -1,0 +1,102 @@
+{
+    "$schema": "https://schema.management.azure.com/schemas/2019-04-01/deploymentTemplate.json#",
+    "contentVersion": "1.0.0.0",
+    "parameters": {
+        "storageAccountName": {
+            "type": "string",
+            "metadata": {
+                "description": "Name of storage account"
+            }
+        },
+        "storageAccountType": {
+            "type": "string",
+            "defaultValue": "Standard_LRS",
+            "allowedValues": [
+                "Standard_LRS",
+                "Standard_GRS",
+                "Premium_LRS"
+            ],
+            "metadata": {
+                "description": "Storage account replication type"
+            }
+        },
+        "location": {
+            "type": "string",
+            "defaultValue": "[resourceGroup().location]",
+            "metadata": {
+                "desciption": "Location for storage account"
+            }
+        }
+    },
+    "functions": [],
+    "variables": {
+            "storageAccountNameLower": "[toLower(parameters('storageAccountName'))]",
+    "tags": {
+        "Environment": "Lab",
+        "Purpose": "VM Storage and Diagnostics",
+        "CreatedBy": "ARM Template"
+    },
+    "storageAccountProperties": {
+        "accessTier": "Cool",
+        "allowBlobPublicAccess": false,
+        "minimumTlsVersion": "TLS1_2",
+        "supportsHttpsTrafficOnly": true
+    }
+    },
+    "resources": [
+            {
+        "type": "Microsoft.Storage/storageAccounts",
+        "apiVersion": "2023-01-01",
+        "name": "[variables('storageAccountNameLower')]",
+        "location": "[parameters('location')]",
+        "tags": "[variables('tags')]",
+        "sku": {
+            "name": "[parameters('storageAccountType')]"
+        },
+        "kind": "StorageV2",
+        "properties": {
+            "accessTier": "[variables('storageAccountProperties').accessTier]",
+            "allowBlobPublicAccess": "[variables('storageAccountProperties').allowBlobPublicAccess]",
+            "minimumTlsVersion": "[variables('storageAccountProperties').minimumTlsVersion]",
+            "supportsHttpsTrafficOnly": "[variables('storageAccountProperties').supportsHttpsTrafficOnly]",
+            "encryption": {
+                "services": {
+                    "blob": {
+                        "enabled": true
+                    },
+                    "file": {
+                        "enabled": true
+                    }
+                },
+                "keySource": "Microsoft.Storage"
+            }
+        }
+    }
+    ],
+    "outputs": {
+            "storageAccountName": {
+        "type": "string",
+        "value": "[variables('storageAccountNameLower')]"
+    },
+    "storageAccountId": {
+        "type": "string",
+        "value": "[resourceId('Microsoft.Storage/storageAccounts', variables('storageAccountNameLower'))]"
+    },
+    "primaryBlobEndpoint": {
+        "type": "string",
+        "value": "[reference(variables('storageAccountNameLower')).primaryEndpoints.blob]"
+    },
+    "primaryFileEndpoint": {
+        "type": "string",
+        "value": "[reference(variables('storageAccountNameLower')).primaryEndpoints.file]"
+    },
+    "storageAccountKey": {
+        "type": "string",
+        "value": "[listKeys(resourceId('Microsoft.Storage/storageAccounts', variables('storageAccountNameLower')), '2023-01-01').keys[0].value]"
+    },
+    "storageConnectionString": {
+        "type": "string",
+        "value": "[concat('DefaultEndpointsProtocol=https;AccountName=', variables('storageAccountNameLower'), ';AccountKey=', listKeys(resourceId('Microsoft.Storage/storageAccounts', variables('storageAccountNameLower')), '2023-01-01').keys[0].value)]"
+    }
+    }
+}
