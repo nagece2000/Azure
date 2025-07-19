@@ -132,3 +132,7 @@ New-AzResourceGroupDeployment `
 - [ ] Complete multi-VM networking lab deployment
 - [ ] VNet Peering configuration
 
+
+## Networking Labs
+Hands-on Azure networking experiments and learning documentation.
+- [01 - NSG and VNet Peering](./Networking-Labs/01-NSG-VNet-Peering/)
