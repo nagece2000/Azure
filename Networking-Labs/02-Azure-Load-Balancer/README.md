@@ -1,6 +1,6 @@
 # Azure Load Balancer Lab
 ## Overview
-This lab demonstrates Azure Standard Load Balancer by creating a web application distributed across multiple VMs with automatic health monitoring and traffic distribution.
+- This lab demonstrates Azure Standard Load Balancer by creating a web application distributed across multiple VMs with automatic health monitoring and traffic distribution.
 
 Internet → Load Balancer Frontend IP → Backend Pool (VM-1 + VM-3)
                                     ↓
@@ -10,9 +10,9 @@ Internet → Load Balancer Frontend IP → Backend Pool (VM-1 + VM-3)
 
 ## Lab Prerequisites
 
-Completed NSG and VNet Peering Lab
-lab-vm-1: Running nginx in lab-vnet-1/web-subnet
-NSG rules: Allow HTTP (port 80) traffic
+- Completed NSG and VNet Peering Lab
+- lab-vm-1: Running nginx in lab-vnet-1/web-subnet
+- NSG rules: Allow HTTP (port 80) traffic
 
 ## Load Balancer Configuration
 
