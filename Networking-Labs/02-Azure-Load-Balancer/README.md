@@ -1,5 +1,5 @@
-Azure Load Balancer Lab
-Overview
+# Azure Load Balancer Lab
+## Overview
 This lab demonstrates Azure Standard Load Balancer by creating a web application distributed across multiple VMs with automatic health monitoring and traffic distribution.
 
 Internet → Load Balancer Frontend IP → Backend Pool (VM-1 + VM-3)
@@ -8,28 +8,26 @@ Internet → Load Balancer Frontend IP → Backend Pool (VM-1 + VM-3)
                                     ↓
                           Traffic Distribution
 
-Lab Prerequisites
+## Lab Prerequisites
 
 Completed NSG and VNet Peering Lab
 lab-vm-1: Running nginx in lab-vnet-1/web-subnet
 NSG rules: Allow HTTP (port 80) traffic
 
-Load Balancer Configuration
+## Load Balancer Configuration
 
 Name: lab-loadbalancer
 Type: Public Standard Load Balancer
 SKU: Standard
 Tier: Regional
 
-Frontend IP Configuration
-
+## Frontend IP Configuration
 Name: lab-lb-ip
 Type: Public IP Address
 Allocation: Static
 Purpose: Single entry point for users
 
-Backend Pool
-
+## Backend Pool
 Name: lab-lb-backendpool
 Virtual Network: lab-vnet-1
 Members:
@@ -37,8 +35,7 @@ Members:
 lab-vm-1 (10.1.1.4)
 lab-vm-3 (10.1.1.5) - Temporary test VM
 
-Health Probe
-
+## Health Probe
 Name: lab-lb-hp
 Protocol: HTTP
 Port: 80
