@@ -175,6 +175,7 @@ Internet → Load Balancer Frontend IP → Backend Pool (VM-1 + VM-3)
 - Verify health probe path exists
 
 # Lab Completion Checklist
+
 ✅ Created Standard Load Balancer with public frontend
 ✅ Configured backend pool with multiple VMs
 ✅ Implemented HTTP health probes
