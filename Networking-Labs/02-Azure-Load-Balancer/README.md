@@ -62,7 +62,7 @@ Internet → Load Balancer Frontend IP → Backend Pool (VM-1 + VM-3)
 echo '&lt;h1&gt;Hello from VM-1 (10.1.1.4)&lt;/h1&gt;' | sudo tee /var/www/html/index.html
 
 # VM-3:
-echo '<h1>Hello from TEMP VM (10.1.1.5)</h1>' | sudo tee /var/www/html/index.html
+echo '&lt;h1&gt;Hello from VM-3 (10.1.1.5)&lt;/h1&gt;' | sudo tee /var/www/html/index.html
 
 # 2. NSG Configuration
 - Updated existing nsg-lab-1 with HTTP access:
