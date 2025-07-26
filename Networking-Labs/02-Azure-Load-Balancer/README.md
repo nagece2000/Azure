@@ -96,9 +96,9 @@ echo '&lt;h1&gt;Hello from VM-3 (10.1.1.5)&lt;/h1&gt;' | sudo tee /var/www/html/
 - http://<load-balancer-frontend-ip>
 
 # Expected behavior:
-# - Regular browser: May cache connection to one VM
-# - Incognito mode: Shows true load balancing
-# - Multiple refreshes should alternate between VMs
+ - Regular browser: May cache connection to one VM
+ - Incognito mode: Shows true load balancing
+ - Multiple refreshes should alternate between VMs
 
 # Command Line Testing
 # Use curl for clean connections
@@ -107,8 +107,8 @@ echo '&lt;h1&gt;Hello from VM-3 (10.1.1.5)&lt;/h1&gt;' | sudo tee /var/www/html/
 - curl http://<load-balancer-frontend-ip>
 
 # Should show alternating responses:
-# "Hello from VM-1 (10.1.1.4)"
-# "Hello from TEMP VM (10.1.1.5)"
+-  "Hello from VM-1 (10.1.1.4)"
+-  "Hello from TEMP VM (10.1.1.5)"
 
 ## Health Monitoring
 # Backend Pool Status Check:
