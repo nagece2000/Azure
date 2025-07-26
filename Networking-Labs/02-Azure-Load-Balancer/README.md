@@ -58,14 +58,10 @@ Internet → Load Balancer Frontend IP → Backend Pool (VM-1 + VM-3)
 - sudo systemctl start nginx
 - sudo systemctl enable nginx
 
-<pre><code>
-
-bash
-# Create unique content for each VM  
-# VM-1:  
-echo '<h1>Hello from VM-1 (10.1.1.4)</h1>' | sudo tee /var/www/html/index.html
-  
-</code></pre>
+# VM-1:
+echo '
+<h1>Hello from VM-1</h1>
+' | sudo tee /var/www/html/index.html
 
 # VM-3:
 echo '<h1>Hello from TEMP VM (10.1.1.5)</h1>' | sudo tee /var/www/html/index.html
