@@ -58,38 +58,41 @@ Automatic Backend Pool Registration
 ### Phase 2: Network Connectivity Troubleshooting
 Problem: VMSS instances couldn't reach Ubuntu repositories
 
-# Error encountered:
+### Error encountered:
 W: Failed to fetch http://azure.archive.ubuntu.com/ubuntu/dists/jammy/InRelease
 Could not connect to azure.archive.ubuntu.com:80
 
-# Root Cause: 
+### Root Cause: 
 Missing outbound NSG rules for internet access
-# Attempted Solution: 
+### Attempted Solution: 
 Added outbound NSG rules
-
 HTTP (port 80) → Internet
 HTTPS (port 443) → Internet
 DNS (port 53) → Internet
 
-Result: Still no connectivity - Azure default outbound access limitations
+### Result: Still no connectivity - Azure default outbound access limitations
 
-Phase 3: Clean Slate Approach (Successful)
-Decision: Recreate VMSS with public IPs for direct access
-New VMSS Configuration:
-
+## Phase 3: Clean Slate Approach (Successful)
+### Decision: 
+Recreate VMSS with public IPs for direct access
+### New VMSS Configuration:
 Public IP per instance: Enabled
 NSG: Combined approach (basicNsglab-vnet-1-nic01 + nsg-lab-1)
 Direct SSH access: For nginx installation and management
 
-Phase 4: NSG Troubleshooting - Real-World Issues
-Issue 1: Dynamic Public IP Changes
-# SSH connection timeout
+## Phase 4: NSG Troubleshooting - Real-World Issues
+## Issue 1: 
+Dynamic Public IP Changes
+## SSH connection timeout
 ssh labadmin@<vmss-instance-ip>
-# Connection timed out
+## Connection timed out
 
-Root Cause: ISP changed public IP, NSG rules pointed to old IP
-Solution: Update NSG source IP rules to current public IP
-Learning: Dynamic IPs require flexible NSG configurations
+## Root Cause: 
+ISP changed public IP, NSG rules pointed to old IP
+## Solution: 
+Update NSG source IP rules to current public IP
+## Learning: 
+Dynamic IPs require flexible NSG configurations
 
 Issue 2: NSG Rule Hierarchy
 Problem: HTTP access not working despite correct NSG rules
