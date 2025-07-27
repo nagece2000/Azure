@@ -93,7 +93,7 @@ echo '&lt;h1&gt;Hello from VM-3 (10.1.1.5)&lt;/h1&gt;' | sudo tee /var/www/html/
 ## Testing Load Balancing
 # Browser Testing
 # Access load balancer frontend IP
-- http://<load-balancer-frontend-ip>
+- `http://<load-balancer-frontend-ip>`
 
 # Expected behavior:
  - Regular browser: May cache connection to one VM
@@ -102,9 +102,9 @@ echo '&lt;h1&gt;Hello from VM-3 (10.1.1.5)&lt;/h1&gt;' | sudo tee /var/www/html/
 
 # Command Line Testing
 # Use curl for clean connections
-- curl http://<load-balancer-frontend-ip>
-- curl http://<load-balancer-frontend-ip>
-- curl http://<load-balancer-frontend-ip>
+- `curl http://<load-balancer-frontend-ip>`
+- `curl http://<load-balancer-frontend-ip>`  
+- `curl http://<load-balancer-frontend-ip>`
 
 # Should show alternating responses:
 -  "Hello from VM-1 (10.1.1.4)"
