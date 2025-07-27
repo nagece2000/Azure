@@ -72,7 +72,7 @@ DNS (port 53) → Internet
 
 ### Result: Still no connectivity - Azure default outbound access limitations
 
-## Phase 3: Clean Slate Approach (Successful)
+### Phase 3: Clean Slate Approach (Successful)
 ### Decision: 
 Recreate VMSS with public IPs for direct access
 ### New VMSS Configuration:
@@ -80,8 +80,8 @@ Public IP per instance: Enabled
 NSG: Combined approach (basicNsglab-vnet-1-nic01 + nsg-lab-1)
 Direct SSH access: For nginx installation and management
 
-## Phase 4: NSG Troubleshooting - Real-World Issues
-# Issue 1: 
+### Phase 4: NSG Troubleshooting - Real-World Issues
+#### Issue 1: 
 Dynamic Public IP Changes
 # SSH connection timeout
 `ssh labadmin@<vmss-instance-ip>`
