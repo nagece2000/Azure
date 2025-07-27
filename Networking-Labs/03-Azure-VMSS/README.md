@@ -84,7 +84,7 @@ Direct SSH access: For nginx installation and management
 ## Issue 1: 
 Dynamic Public IP Changes
 ## SSH connection timeout
-ssh labadmin@<vmss-instance-ip>
+`ssh labadmin@<vmss-instance-ip>`
 ## Connection timed out
 
 ## Root Cause: 
