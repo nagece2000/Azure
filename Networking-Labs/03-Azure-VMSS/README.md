@@ -57,7 +57,7 @@ Automatic Backend Pool Registration
 
 ### Phase 2: Network Connectivity Troubleshooting
 **Problem**: VMSS instances couldn't reach Ubuntu repositories
-```bash
+
 # Error encountered:
 W: Failed to fetch http://azure.archive.ubuntu.com/ubuntu/dists/jammy/InRelease
 Could not connect to azure.archive.ubuntu.com:80
