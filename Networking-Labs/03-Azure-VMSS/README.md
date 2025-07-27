@@ -56,15 +56,16 @@ Automatic Backend Pool Registration
 - **Issue**: No outbound internet connectivity for package installation
 
 ### Phase 2: Network Connectivity Troubleshooting
-**Problem**: VMSS instances couldn't reach Ubuntu repositories
+Problem: VMSS instances couldn't reach Ubuntu repositories
 
 # Error encountered:
 W: Failed to fetch http://azure.archive.ubuntu.com/ubuntu/dists/jammy/InRelease
 Could not connect to azure.archive.ubuntu.com:80
 
-Root Cause: Missing outbound NSG rules for internet access
-
-Attempted Solution: Added outbound NSG rules
+# Root Cause: 
+Missing outbound NSG rules for internet access
+# Attempted Solution: 
+Added outbound NSG rules
 
 HTTP (port 80) → Internet
 HTTPS (port 443) → Internet
