@@ -277,3 +277,252 @@ VNet peering is excellent for simple connectivity scenarios, but when you need:
 ---
 
 **Next:** Phase 2 - Implementing NVA Routing
+
+## 🛡️ Phase 2: NVA Implementation
+
+### Objective
+
+Implement a Hub-and-Spoke topology with a Network Virtual Appliance (NVA) to route all traffic between Spoke1 and Spoke2 through a central inspection point.
+
+### Architecture Overview
+```
+           Hub VNet (10.0.0.0/16)
+                   |
+              NVA VM (10.0.1.4)
+              /            \
+             /              \
+    Spoke1 VNet          Spoke2 VNet
+   (10.1.0.0/16)        (10.2.0.0/16)
+        |                    |
+   spoke1-vm            spoke2-vm
+   (10.1.1.4)           (10.2.1.4)
+```
+
+**Traffic Flow:**
+```
+Spoke1 VM → Route Table → NVA → Route Table → Spoke2 VM
+```
+
+### Part A: Configure the NVA VM
+
+The NVA VM must be configured to forward packets between networks.
+
+**1. SSH to NVA VM:**
+```bash
+ssh -i vna-lab-key azureuser@<nva-public-ip>
+```
+
+**2. Enable IP Forwarding in Linux:**
+
+Check current setting:
+```bash
+cat /proc/sys/net/ipv4/ip_forward
+# Should show 0 (disabled)
+```
+
+Enable temporarily:
+```bash
+sudo sysctl -w net.ipv4.ip_forward=1
+```
+
+Make it permanent (survives reboots):
+```bash
+echo "net.ipv4.ip_forward=1" | sudo tee -a /etc/sysctl.conf
+```
+
+Verify it's enabled:
+```bash
+cat /proc/sys/net/ipv4/ip_forward
+# Should show 1 (enabled) ✅
+```
+
+**3. Configure iptables:**
+
+Allow packet forwarding:
+```bash
+# Set default FORWARD policy to ACCEPT
+sudo iptables -P FORWARD ACCEPT
+
+# View current rules
+sudo iptables -L FORWARD -n -v
+```
+
+**4. Make iptables rules persistent:**
+```bash
+sudo apt-get update
+sudo apt-get install -y iptables-persistent
+
+# When prompted, select YES to save current IPv4 rules
+# Select YES to save current IPv6 rules
+```
+
+**5. Verify Configuration:**
+```bash
+# Check IP forwarding
+cat /proc/sys/net/ipv4/ip_forward  # Should be 1
+
+# Check iptables
+sudo iptables -L -n -v
+
+# Check NIC has IP forwarding enabled (should already be set by Terraform)
+# This is at Azure level, not Linux level
+```
+
+**Important:** Terraform already set `enable_ip_forwarding = true` on the NVA's NIC, but we need both Azure-level AND OS-level forwarding.
+
+### Part B: Create Hub-Spoke VNet Peering
+
+The NVA needs to reach both spoke networks. Create VNet peerings between Hub and each Spoke.
+
+#### **Peering 1: Hub ↔ Spoke1**
+
+1. Navigate to **Virtual networks** → **hub-vnet** → **Peerings**
+2. Click **+ Add**
+3. Configure:
+   - **This virtual network (hub-vnet)**
+     - Peering link name: `hub-to-spoke1`
+     - Traffic to remote virtual network: `Allow`
+     - **Traffic forwarded from remote virtual network: `Allow`** ⚠️ Critical!
+   - **Remote virtual network**
+     - Peering link name: `spoke1-to-hub`
+     - Virtual network: `spoke1-vnet`
+     - Traffic to remote virtual network: `Allow`
+     - **Traffic forwarded from remote virtual network: `Allow`** ⚠️ Critical!
+4. Click **Add**
+
+#### **Peering 2: Hub ↔ Spoke2**
+
+1. Still in **hub-vnet** → **Peerings**
+2. Click **+ Add**
+3. Configure:
+   - **This virtual network (hub-vnet)**
+     - Peering link name: `hub-to-spoke2`
+     - Traffic to remote virtual network: `Allow`
+     - **Traffic forwarded from remote virtual network: `Allow`** ⚠️ Critical!
+   - **Remote virtual network**
+     - Peering link name: `spoke2-to-hub`
+     - Virtual network: `spoke2-vnet`
+     - Traffic to remote virtual network: `Allow`
+     - **Traffic forwarded from remote virtual network: `Allow`** ⚠️ Critical!
+4. Click **Add**
+
+**Why "Allow forwarded traffic" is critical:** This allows traffic originating from Spoke1 to pass through the Hub to reach Spoke2.
+
+### Part C: Create Route Tables (UDRs)
+
+User Defined Routes tell Azure to send traffic through the NVA instead of using default routing.
+
+#### **Route Table 1: For Spoke1 Subnet**
+
+**1. Create Route Table:**
+- Go to **Route tables** → **+ Create**
+- Resource group: `rg-vna-lab`
+- Region: `East US`
+- Name: `spoke1-to-nva-rt`
+- Click **Review + create** → **Create**
+
+**2. Add Route:**
+- Open `spoke1-to-nva-rt` → **Routes** → **+ Add**
+- Route name: `to-spoke2-via-nva`
+- Address prefix: `10.2.0.0/16` (Spoke2 VNet range)
+- Next hop type: `Virtual appliance`
+- Next hop address: `10.0.1.4` (NVA private IP)
+- Click **Add**
+
+**3. Associate with Spoke1 Subnet:**
+- Click **Subnets** → **+ Associate**
+- Virtual network: `spoke1-vnet`
+- Subnet: `vm-subnet`
+- Click **OK**
+
+#### **Route Table 2: For Spoke2 Subnet**
+
+**1. Create Route Table:**
+- Go to **Route tables** → **+ Create**
+- Resource group: `rg-vna-lab`
+- Region: `East US`
+- Name: `spoke2-to-nva-rt`
+- Click **Review + create** → **Create**
+
+**2. Add Route:**
+- Open `spoke2-to-nva-rt` → **Routes** → **+ Add**
+- Route name: `to-spoke1-via-nva`
+- Address prefix: `10.1.0.0/16` (Spoke1 VNet range)
+- Next hop type: `Virtual appliance`
+- Next hop address: `10.0.1.4` (NVA private IP)
+- Click **Add**
+
+**3. Associate with Spoke2 Subnet:**
+- Click **Subnets** → **+ Associate**
+- Virtual network: `spoke2-vnet`
+- Subnet: `vm-subnet`
+- Click **OK**
+
+### Verify Routing Configuration
+
+**Check Effective Routes on Spoke1 VM:**
+
+1. Go to **Virtual machines** → **spoke1-vm** → **Networking**
+2. Click on network interface: **spoke1-vm-nic**
+3. Click **Effective routes** (under Support + troubleshooting)
+4. Look for:
+   - Address prefix: `10.2.0.0/16`
+   - Next hop type: `Virtual appliance`
+   - Next hop IP: `10.0.1.4`
+
+✅ **If you see this route, routing is configured correctly!**
+
+### Test Traffic Through NVA
+
+Now the moment of truth - verify traffic flows through the NVA!
+
+**Terminal 1 - Monitor NVA Traffic:**
+```bash
+# SSH to NVA
+ssh -i vna-lab-key azureuser@<nva-public-ip>
+
+# Run tcpdump to capture inter-spoke traffic
+sudo tcpdump -i eth0 -n host 10.1.1.4 or host 10.2.1.4
+```
+
+**Terminal 2 - Generate Traffic:**
+```bash
+# SSH to Spoke1
+ssh -i vna-lab-key azureuser@<spoke1-public-ip>
+
+# Ping Spoke2
+ping 10.2.1.4 -c 4
+```
+
+**Expected Result on NVA tcpdump:**
+```
+IP 10.1.1.4 > 10.2.1.4: ICMP echo request, id 1, seq 1, length 64
+IP 10.0.1.4 > 10.2.1.4: ICMP echo request, id 1, seq 1, length 64
+IP 10.2.1.4 > 10.0.1.4: ICMP echo reply, id 1, seq 1, length 64
+IP 10.2.1.4 > 10.1.1.4: ICMP echo reply, id 1, seq 1, length 64
+```
+
+✅ **SUCCESS!** You're seeing traffic flow through the NVA!
+
+### What We Achieved
+
+**Compared to VNet Peering:**
+
+| Capability | VNet Peering | NVA Solution |
+|-----------|--------------|--------------|
+| **Connectivity** | ✅ Direct | ✅ Via NVA |
+| **Central visibility** | ❌ No | ✅ **tcpdump on NVA sees ALL traffic** |
+| **Monitoring point** | ❌ Must monitor each VM | ✅ **One central point** |
+| **Traffic control** | ❌ All-or-nothing | ✅ Ready for granular rules |
+| **Scalability** | ❌ N-to-N peering | ✅ Hub-and-spoke model |
+
+### Key Observations
+
+1. **Central Choke Point:** All Spoke1 ↔ Spoke2 traffic now passes through the NVA
+2. **Full Visibility:** Single tcpdump session sees all inter-spoke traffic
+3. **Foundation for Control:** We can now add filtering, logging, and security policies
+4. **No Changes to VMs:** Spoke VMs don't need any configuration - routing is transparent
+
+---
+
+**Next:** Phase 3 - Selective Traffic Control (The Killer Feature!)
