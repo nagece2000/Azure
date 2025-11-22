@@ -48,5 +48,74 @@ This lab demonstrates the differences between Azure VNet Peering and routing thr
 
 **Knowledge:**
 - Basic Azure networking concepts
+
+- ## 🔐 Authentication Setup
+
+This lab uses Azure Service Principal authentication for Terraform, which is more secure and suitable for automation compared to Azure CLI authentication.
+
+### Why Service Principal?
+
+- ✅ No dependency on Azure CLI being in PATH
+- ✅ Works in CI/CD pipelines
+- ✅ Explicitly defined credentials
+- ✅ Can be scoped to specific permissions
+- ✅ Better for automation and team environments
+
+### Create Service Principal
+
+**Option 1: Using Azure Portal**
+
+1. Navigate to **Azure Active Directory** (or **Microsoft Entra ID**)
+2. Go to **App registrations** → **New registration**
+   - Name: `terraform-vna-lab`
+   - Account type: "Accounts in this organizational directory only"
+   - Click **Register**
+
+3. Note the **Application (client) ID** and **Directory (tenant) ID**
+
+4. Create a client secret:
+   - Go to **Certificates & secrets** → **New client secret**
+   - Description: `terraform-secret`
+   - Expiry: Choose duration (e.g., 24 months)
+   - Click **Add**
+   - **⚠️ Copy the secret value immediately** (you can't see it again!)
+
+5. Assign permissions:
+   - Go to **Subscriptions** → Select your subscription
+   - Click **Access control (IAM)** → **Add role assignment**
+   - Role: **Contributor**
+   - Assign access to: Your service principal (`terraform-vna-lab`)
+
+**Option 2: Using Azure CLI**
+```bash
+az ad sp create-for-rbac --name "terraform-vna-lab" \
+  --role="Contributor" \
+  --scopes="/subscriptions/<YOUR_SUBSCRIPTION_ID>"
+```
+
+### Configure Terraform Authentication
+
+Set environment variables (session-based):
+```cmd
+# Windows Command Prompt
+set ARM_CLIENT_ID=<your-client-id>
+set ARM_CLIENT_SECRET=<your-client-secret>
+set ARM_SUBSCRIPTION_ID=<your-subscription-id>
+set ARM_TENANT_ID=<your-tenant-id>
+```
+```bash
+# Linux/Mac/WSL
+export ARM_CLIENT_ID="<your-client-id>"
+export ARM_CLIENT_SECRET="<your-client-secret>"
+export ARM_SUBSCRIPTION_ID="<your-subscription-id>"
+export ARM_TENANT_ID="<your-tenant-id>"
+```
+
+### Important Security Notes
+
+⚠️ **Never commit secrets to Git!**
+- Add `terraform.tfvars` to `.gitignore`
+- Add `*.tfvars` to `.gitignore` (except `*.tfvars.example`)
+- Never hardcode credentials in Terraform files
 - Basic Linux command line
 - Basic understanding of IaC principles
