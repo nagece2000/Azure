@@ -1,0 +1,18 @@
+# Terraform state files
+*.tfstate
+*.tfstate.*
+.terraform/
+.terraform.lock.hcl
+
+# Sensitive files
+terraform.tfvars
+*.tfvars
+!terraform.tfvars.example
+
+# Crash logs
+crash.log
+
+# SSH keys
+*.pem
+*-key
+*-key.pub
