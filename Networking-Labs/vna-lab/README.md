@@ -526,3 +526,656 @@ IP 10.2.1.4 > 10.1.1.4: ICMP echo reply, id 1, seq 1, length 64
 ---
 
 **Next:** Phase 3 - Selective Traffic Control (The Killer Feature!)
+
+## 🎯 Phase 3: Selective Traffic Control
+
+### Objective
+
+Demonstrate the **killer feature** of NVA routing: granular traffic control that is **impossible** with VNet peering alone.
+
+**The Challenge:**
+- ✅ Allow ICMP (ping) between Spoke1 ↔ Spoke2
+- ❌ Block SSH (port 22) between Spoke1 ↔ Spoke2
+- ✅ Keep SSH from the internet to VMs working
+
+**Why this matters:** With VNet peering, this is impossible. NSG rules would block SSH from everywhere, not just between spokes.
+
+### Configure iptables on NVA
+
+**1. SSH to NVA VM:**
+```bash
+ssh -i vna-lab-key azureuser@<nva-public-ip>
+```
+
+**2. Clear existing rules and enable logging:**
+```bash
+# Clear FORWARD chain (start fresh)
+sudo iptables -F FORWARD
+
+# Set default policy to ACCEPT
+sudo iptables -P FORWARD ACCEPT
+
+# Add logging for all forwarded traffic (optional but useful)
+sudo iptables -A FORWARD -j LOG --log-prefix "NVA-FORWARD: " --log-level 4
+```
+
+**3. Test baseline (everything should work):**
+
+From another terminal:
+```bash
+# SSH to Spoke1
+ssh -i vna-lab-key azureuser@<spoke1-public-ip>
+
+# Test ping
+ping 10.2.1.4 -c 2
+# Should work ✅
+
+# Test SSH connectivity to Spoke2 (port check)
+nc -zv 10.2.1.4 22
+# Should show: Connection succeeded ✅
+```
+
+**4. Add selective blocking rules:**
+
+Back on NVA:
+```bash
+# Block SSH (port 22) FROM Spoke1 TO Spoke2
+sudo iptables -I FORWARD 1 -p tcp --dport 22 -s 10.1.0.0/16 -d 10.2.0.0/16 -j DROP
+
+# Block SSH FROM Spoke2 TO Spoke1
+sudo iptables -I FORWARD 1 -p tcp --dport 22 -s 10.2.0.0/16 -d 10.1.0.0/16 -j DROP
+
+# Explicitly allow ICMP (already allowed by default policy, but being explicit)
+sudo iptables -I FORWARD 1 -p icmp -j ACCEPT
+```
+
+**5. View the rules:**
+```bash
+sudo iptables -L FORWARD -n -v --line-numbers
+```
+
+**Expected output:**
+```
+Chain FORWARD (policy ACCEPT)
+num   pkts bytes target  prot opt in  out  source        destination
+1        0     0 ACCEPT  icmp --  *   *    0.0.0.0/0     0.0.0.0/0
+2        0     0 DROP    tcp  --  *   *    10.1.0.0/16   10.2.0.0/16  tcp dpt:22
+3        0     0 DROP    tcp  --  *   *    10.2.0.0/16   10.1.0.0/16  tcp dpt:22
+4        0     0 LOG     all  --  *   *    0.0.0.0/0     0.0.0.0/0    LOG flags 0 level 4 prefix "NVA-FORWARD: "
+```
+
+**6. Make rules persistent:**
+```bash
+# Save current rules
+sudo netfilter-persistent save
+
+# Or manually save
+sudo iptables-save | sudo tee /etc/iptables/rules.v4
+```
+
+### Test Selective Control
+
+Now for the magic moment!
+
+#### **Test 1: Ping Still Works ✅**
+
+**From Spoke1:**
+```bash
+ping 10.2.1.4 -c 4
+```
+
+**Expected Result:**
+```
+PING 10.2.1.4 (10.2.1.4) 56(84) bytes of data.
+64 bytes from 10.2.1.4: icmp_seq=1 ttl=63 time=2.45 ms
+64 bytes from 10.2.1.4: icmp_seq=2 ttl=63 time=1.89 ms
+64 bytes from 10.2.1.4: icmp_seq=3 ttl=63 time=1.92 ms
+64 bytes from 10.2.1.4: icmp_seq=4 ttl=63 time=1.88 ms
+
+--- 10.2.1.4 ping statistics ---
+4 packets transmitted, 4 received, 0% packet loss, time 3005ms
+```
+
+✅ **ICMP traffic flows through NVA and is allowed!**
+
+#### **Test 2: SSH Between Spokes is Blocked ❌**
+
+**From Spoke1:**
+```bash
+# Test SSH connection to Spoke2
+nc -zv 10.2.1.4 22
+```
+
+**Expected Result:**
+```
+nc: connect to 10.2.1.4 port 22 (tcp) failed: Connection timed out
+```
+
+❌ **SSH blocked by NVA! Perfect!**
+
+Or try direct SSH:
+```bash
+ssh azureuser@10.2.1.4
+# Will hang and timeout
+```
+
+#### **Test 3: SSH from Internet Still Works ✅**
+
+**From your laptop:**
+```bash
+# SSH to Spoke1 (using public IP)
+ssh -i vna-lab-key azureuser@<spoke1-public-ip>
+# Should work ✅
+
+# SSH to Spoke2 (using public IP)
+ssh -i vna-lab-key azureuser@<spoke2-public-ip>
+# Should work ✅
+```
+
+✅ **SSH from internet works because it doesn't route through NVA!**
+
+### Monitor Traffic on NVA
+
+**Watch the logs in real-time:**
+```bash
+# On NVA VM
+sudo tail -f /var/log/kern.log | grep NVA-FORWARD
+```
+
+**Generate traffic from Spoke1** (ping and SSH attempts):
+```bash
+# From Spoke1
+ping 10.2.1.4 -c 2
+nc -zv 10.2.1.4 22
+```
+
+**What you'll see in logs:**
+```
+NVA-FORWARD: IN=eth0 OUT=eth0 SRC=10.1.1.4 DST=10.2.1.4 PROTO=ICMP
+NVA-FORWARD: IN=eth0 OUT=eth0 SRC=10.1.1.4 DST=10.2.1.4 PROTO=TCP DPT=22
+```
+
+You can see both allowed (ICMP) and blocked (TCP/22) traffic!
+
+### The Breakthrough
+
+**What We Just Accomplished:**
+
+| Requirement | VNet Peering | NVA Solution |
+|------------|--------------|--------------|
+| **Allow ICMP, block SSH between spokes** | ❌ **IMPOSSIBLE** | ✅ **DONE** |
+| **Keep internet SSH working** | N/A | ✅ **Works** |
+| **Central visibility** | ❌ No | ✅ **All logs on NVA** |
+| **Granular control** | ❌ All-or-nothing | ✅ **Protocol-level** |
+
+### Real-World Use Cases
+
+This capability enables critical security scenarios:
+
+**1. Micro-segmentation:**
+```
+Allow:  App Tier → Database Tier (port 3306)
+Block:  App Tier → Database Tier (SSH)
+Result: Apps can access DB, but can't SSH directly to DB servers
+```
+
+**2. Compliance Requirements:**
+```
+Allow:  Development → Staging (HTTP/HTTPS)
+Block:  Development → Production (everything)
+Result: Prevent dev from touching production
+```
+
+**3. Lateral Movement Prevention:**
+```
+Allow:  East-West traffic (normal operations)
+Block:  East-West traffic (known attack patterns)
+Result: Contain security breaches
+```
+
+**4. Protocol-Specific Policies:**
+```
+Allow:  ICMP (monitoring/health checks)
+Block:  RDP/SSH (reduce attack surface)
+Allow:  HTTPS only (encrypted traffic)
+Result: Enforce security standards
+```
+
+### Advanced: Add More Rules
+
+**Example: Allow HTTP/HTTPS, block everything else:**
+```bash
+# Clear current rules
+sudo iptables -F FORWARD
+
+# Allow ICMP
+sudo iptables -A FORWARD -p icmp -j ACCEPT
+
+# Allow HTTP (port 80)
+sudo iptables -A FORWARD -p tcp --dport 80 -j ACCEPT
+
+# Allow HTTPS (port 443)
+sudo iptables -A FORWARD -p tcp --dport 443 -j ACCEPT
+
+# Block all other TCP traffic between spokes
+sudo iptables -A FORWARD -p tcp -s 10.1.0.0/16 -d 10.2.0.0/16 -j DROP
+sudo iptables -A FORWARD -p tcp -s 10.2.0.0/16 -d 10.1.0.0/16 -j DROP
+
+# Log everything
+sudo iptables -A FORWARD -j LOG --log-prefix "NVA-FORWARD: "
+
+# Allow everything else (outbound to internet, etc.)
+sudo iptables -A FORWARD -j ACCEPT
+```
+
+### Comparison Summary
+
+**With VNet Peering (Phase 1):**
+- Direct connectivity ✅
+- No visibility ❌
+- No control ❌
+- Simple to set up ✅
+
+**With NVA (Phase 2 & 3):**
+- Routed connectivity ✅
+- Full visibility ✅
+- Granular control ✅
+- Requires configuration ⚠️
+
+### Key Takeaway
+
+**The NVA solution provides:**
+1. ✅ **Central choke point** - All traffic in one place
+2. ✅ **Full visibility** - See everything with tcpdump/logs
+3. ✅ **Granular control** - Allow/block at protocol/port level
+4. ✅ **Security enforcement** - Network-level policies
+5. ✅ **Scalability** - One point controls all inter-VNet traffic
+
+**This is impossible with VNet peering alone!**
+
+---
+
+**Next:** Troubleshooting Guide
+
+## 🔧 Troubleshooting Guide
+
+Common issues encountered during this lab and how to resolve them.
+
+### Issue 1: Ping/SSH Fails - "Connection Timed Out"
+
+**Symptom:**
+```bash
+ssh azureuser@4.246.218.45
+# ssh: connect to host 4.246.218.45 port 22: Connection timed out
+```
+
+**Cause:** Your public IP changed (dynamic IPs change frequently).
+
+**Solution:**
+
+1. Check your current public IP:
+```bash
+curl ifconfig.me
+```
+
+2. Update NSG rules via Azure CLI:
+```bash
+az network nsg rule update \
+  --resource-group rg-vna-lab \
+  --nsg-name spoke1-nsg \
+  --name Allow-SSH-From-MyIP \
+  --source-address-prefixes "YOUR_NEW_IP/32"
+
+# Repeat for spoke2-nsg and hub-nsg
+```
+
+Or update `terraform.tfvars` and run:
+```bash
+terraform apply
+```
+
+**Prevention:** Use static public IP for your home/office, or use Azure Bastion.
+
+---
+
+### Issue 2: Traffic Not Flowing Through NVA
+
+**Symptom:**
+```bash
+# On NVA, tcpdump shows no traffic
+sudo tcpdump -i eth0 -n host 10.1.1.4 or host 10.2.1.4
+# No packets captured
+```
+
+**Possible Causes & Solutions:**
+
+#### **A. Missing Hub-Spoke Peering**
+
+**Check:**
+```bash
+# Verify Hub ↔ Spoke1 peering
+az network vnet peering show \
+  --resource-group rg-vna-lab \
+  --vnet-name hub-vnet \
+  --name hub-to-spoke1 \
+  --query peeringState
+
+# Should return "Connected"
+```
+
+**Fix:** Create missing peerings (see Phase 2, Part B).
+
+#### **B. IP Forwarding Not Enabled (Azure Level)**
+
+**Check:**
+```bash
+az network nic show \
+  --resource-group rg-vna-lab \
+  --name nva-vm-nic \
+  --query "enableIpForwarding"
+```
+
+**Expected:** `true`
+
+**Fix:**
+```bash
+az network nic update \
+  --resource-group rg-vna-lab \
+  --name nva-vm-nic \
+  --ip-forwarding true
+```
+
+#### **C. IP Forwarding Not Enabled (OS Level)**
+
+**Check on NVA:**
+```bash
+cat /proc/sys/net/ipv4/ip_forward
+# Should show 1
+```
+
+**Fix:**
+```bash
+sudo sysctl -w net.ipv4.ip_forward=1
+echo "net.ipv4.ip_forward=1" | sudo tee -a /etc/sysctl.conf
+```
+
+#### **D. Route Tables Not Associated**
+
+**Check:**
+```bash
+az network vnet subnet show \
+  --resource-group rg-vna-lab \
+  --vnet-name spoke1-vnet \
+  --name vm-subnet \
+  --query "routeTable.id"
+```
+
+**Expected:** Should show route table resource ID, not `null`
+
+**Fix:** Associate route table with subnet (see Phase 2, Part C).
+
+#### **E. Wrong Route Configuration**
+
+**Check Effective Routes:**
+1. Go to Portal → **spoke1-vm** → **Networking**
+2. Click NIC → **Effective routes**
+3. Look for route: `10.2.0.0/16` → Next hop: `10.0.1.4`
+
+**Fix:** Verify route table configuration has correct next hop IP.
+
+---
+
+### Issue 3: iptables Rules Not Working
+
+**Symptom:** SSH still works between spokes when it should be blocked.
+
+**Check Current Rules:**
+```bash
+sudo iptables -L FORWARD -n -v --line-numbers
+```
+
+**Common Issues:**
+
+#### **A. Rules in Wrong Order**
+
+iptables processes rules top-to-bottom. If ACCEPT rule comes before DROP, DROP never gets hit.
+
+**Fix:**
+```bash
+# Use -I (insert) instead of -A (append) to add at top
+sudo iptables -I FORWARD 1 -p tcp --dport 22 -s 10.1.0.0/16 -d 10.2.0.0/16 -j DROP
+```
+
+#### **B. Wrong Chain**
+
+Make sure rules are in FORWARD chain, not INPUT or OUTPUT.
+
+#### **C. Rules Not Persistent**
+
+**Save rules:**
+```bash
+sudo netfilter-persistent save
+```
+
+Or manually:
+```bash
+sudo iptables-save | sudo tee /etc/iptables/rules.v4
+```
+
+**Verify saved:**
+```bash
+cat /etc/iptables/rules.v4
+```
+
+---
+
+### Issue 4: Terraform Conflicts
+
+**Symptom:**
+```
+Error: creating/updating resource: StatusCode=409
+Conflict: Resource already exists
+```
+
+**Cause:** Resource created manually in Portal, but Terraform doesn't know about it.
+
+**Solutions:**
+
+**Option A: Delete manual resource, let Terraform manage it**
+```bash
+# Delete from Portal, then
+terraform apply
+```
+
+**Option B: Import into Terraform (advanced)**
+```bash
+terraform import azurerm_resource_type.name /subscriptions/.../resourceId
+```
+
+**Option C: Remove from Terraform code**
+- Comment out the resource in `main.tf`
+- Manage it manually going forward
+
+**Best Practice:** Choose ONE source of truth - either Terraform OR Portal, not both!
+
+---
+
+### Issue 5: VM Can't Be Started
+
+**Symptom:**
+```
+az vm start --resource-group rg-vna-lab --name spoke1-vm
+# Error: Quota exceeded
+```
+
+**Cause:** Azure subscription quota limits.
+
+**Check Quotas:**
+```bash
+az vm list-usage --location eastus --output table
+```
+
+**Solutions:**
+1. Delete unused VMs/resources
+2. Request quota increase via Azure Portal → Quotas
+3. Use smaller VM size (B1ls instead of B1s)
+4. Try different region
+
+---
+
+### Issue 6: Standard SKU Public IP Quota Error
+
+**Symptom:**
+```
+Error: Cannot create more than X Standard SKU public IP addresses
+```
+
+**Fix:** Already handled in Terraform - we use Standard SKU with Static allocation.
+
+If you see this error:
+1. Delete unused public IPs
+2. Request quota increase
+3. Use Basic SKU (not recommended for production)
+
+---
+
+### Issue 7: SSH Key Permission Errors
+
+**Symptom:**
+```bash
+ssh -i vna-lab-key azureuser@10.1.1.4
+# Permissions 0644 for 'vna-lab-key' are too open
+```
+
+**Fix:**
+```bash
+chmod 600 vna-lab-key
+```
+
+Private keys must have restricted permissions.
+
+---
+
+### Issue 8: tcpdump Shows Duplicate Packets
+
+**Symptom:**
+```
+10.1.1.4 > 10.2.1.4: ICMP echo request
+10.0.1.4 > 10.2.1.4: ICMP echo request  # Duplicate?
+```
+
+**Explanation:** This is NORMAL! You're seeing:
+1. Incoming packet (source: 10.1.1.4)
+2. Forwarded packet (source changed by NAT/routing)
+
+This shows the NVA is working correctly!
+
+---
+
+### Issue 9: Peering Status Shows "Updating"
+
+**Symptom:** Peering stuck in "Updating" state.
+
+**Fix:**
+1. Wait 2-3 minutes (can take time to propagate)
+2. If still stuck after 5 minutes, delete and recreate
+3. Check for conflicting peerings
+
+---
+
+### Issue 10: Can't Find Resources in Portal
+
+**Symptom:** Resources created by Terraform not visible in Portal.
+
+**Check:**
+1. Correct subscription selected?
+2. Correct resource group?
+3. Resource actually created?
+
+**Verify via CLI:**
+```bash
+az resource list --resource-group rg-vna-lab --output table
+```
+
+---
+
+## Debugging Commands
+
+**General Azure Resource Check:**
+```bash
+# List all resources in resource group
+az resource list -g rg-vna-lab --output table
+
+# Check VM status
+az vm list -g rg-vna-lab --show-details --output table
+
+# Check VNet peerings
+az network vnet peering list -g rg-vna-lab --vnet-name hub-vnet --output table
+
+# Check route tables
+az network route-table list -g rg-vna-lab --output table
+
+# Check NSG rules
+az network nsg rule list -g rg-vna-lab --nsg-name spoke1-nsg --output table
+```
+
+**NVA Diagnostics:**
+```bash
+# On NVA VM:
+
+# Check IP forwarding
+cat /proc/sys/net/ipv4/ip_forward
+
+# Check network interfaces
+ip addr show
+
+# Check iptables rules
+sudo iptables -L -n -v
+sudo iptables -t nat -L -n -v
+
+# Check routing table
+ip route show
+
+# Monitor traffic
+sudo tcpdump -i eth0 -n
+
+# Check logs
+sudo tail -f /var/log/kern.log | grep NVA-FORWARD
+```
+
+**Network Connectivity Tests:**
+```bash
+# From Spoke VMs:
+
+# Test ping
+ping 10.2.1.4 -c 4
+
+# Test port connectivity
+nc -zv 10.2.1.4 22
+nc -zv 10.2.1.4 80
+
+# Trace route
+traceroute 10.2.1.4
+
+# Check DNS
+nslookup google.com
+
+# Check default route
+ip route show
+```
+
+---
+
+## Tips for Success
+
+1. **Work methodically:** Complete each phase before moving to the next
+2. **Document as you go:** Take screenshots at each step
+3. **Test incrementally:** Verify each component works before adding complexity
+4. **Check both directions:** Test Spoke1→Spoke2 AND Spoke2→Spoke1
+5. **Use multiple terminals:** Monitor NVA while generating traffic from Spokes
+6. **Save your work:** Take snapshots or save iptables rules
+7. **Clean up when done:** Stop/deallocate VMs to avoid unnecessary costs
+
+---
+
+**Next:** Key Learnings & Best Practices
