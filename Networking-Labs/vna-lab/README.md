@@ -1179,3 +1179,393 @@ ip route show
 ---
 
 **Next:** Key Learnings & Best Practices
+
+## 📚 Key Learnings & Best Practices
+
+This section captures important lessons learned during the implementation of this lab.
+
+### Azure Networking Concepts
+
+#### **1. VNet Peering vs Hub-and-Spoke**
+
+**VNet Peering (Mesh):**
+```
+VNet1 ←→ VNet2
+  ↓  ×    ↓
+VNet3 ←→ VNet4
+```
+- **Pros:** Low latency, simple setup
+- **Cons:** Scales poorly (N² connections), no central control
+- **Use when:** Small number of VNets, no inspection needed
+
+**Hub-and-Spoke with NVA:**
+```
+      Hub
+    /  |  \
+Spoke1 Spoke2 Spoke3
+```
+- **Pros:** Scales well, central control, inspection capability
+- **Cons:** Additional latency, complexity, cost
+- **Use when:** Security requirements, compliance, many VNets
+
+#### **2. User Defined Routes (UDRs)**
+
+**Critical Lessons:**
+- UDRs override default Azure routing
+- Applied at subnet level, not VM level
+- Must be configured in BOTH directions (Spoke1→Spoke2 AND Spoke2→Spoke1)
+- Check "Effective Routes" on VM NIC to verify what's actually applied
+- Changes can take 1-2 minutes to propagate
+
+**Common Mistake:**
+```bash
+# Wrong: Only creating route on Spoke1
+Spoke1 can reach Spoke2 ✅
+Spoke2 cannot reach Spoke1 ❌  # Asymmetric routing!
+```
+
+**Correct:** Create route tables on BOTH subnets.
+
+#### **3. IP Forwarding - Two Levels**
+
+**You need BOTH:**
+
+**A. Azure NIC Level:**
+```bash
+az network nic show --name nva-vm-nic --query "enableIpForwarding"
+```
+- Controlled by Azure
+- Set via Terraform: `enable_ip_forwarding = true`
+- Can be updated without VM restart
+
+**B. OS Level (Linux kernel):**
+```bash
+cat /proc/sys/net/ipv4/ip_forward
+```
+- Controlled inside the VM
+- Must be configured: `sysctl -w net.ipv4.ip_forward=1`
+- Make persistent: Add to `/etc/sysctl.conf`
+
+**Both must be enabled** or forwarding fails!
+
+#### **4. NSG Rule Hierarchy**
+
+**What we learned:**
+- NSG rules can be at **subnet level** OR **NIC level**
+- **NIC-level rules take precedence** when both exist
+- For NVA labs, subnet-level NSGs are cleaner and more manageable
+- Priority matters: Lower number = evaluated first
+
+**Best Practice:**
+```
+Priority 100: Allow SSH from your IP (specific)
+Priority 110-120: Allow inter-VNet traffic (broader)
+Priority 65000+: Azure default rules (last resort)
+```
+
+#### **5. VNet Peering - "Allow Forwarded Traffic"**
+
+**Critical Setting:** When creating Hub ↔ Spoke peerings:
+- ✅ **Must enable "Allow forwarded traffic"**
+- Without this: Traffic from Spoke1 cannot transit through Hub to Spoke2
+- This is what enables the Hub-and-Spoke topology
+
+**Why:**
+- Spoke1 traffic to Spoke2 originates from 10.1.x.x (not Hub)
+- From Hub's perspective, this is "forwarded traffic"
+- Must explicitly allow it
+
+### Linux/iptables Learnings
+
+#### **1. iptables Chains**
+
+**Three main chains for our use case:**
+- **INPUT:** Traffic destined FOR the NVA itself
+- **OUTPUT:** Traffic originating FROM the NVA itself
+- **FORWARD:** Traffic passing THROUGH the NVA (what we need!)
+
+**Common Mistake:** Putting rules in INPUT/OUTPUT instead of FORWARD.
+
+#### **2. iptables Rule Order Matters**
+
+**Rules are evaluated top-to-bottom, first match wins:**
+```bash
+# Wrong order:
+sudo iptables -A FORWARD -j ACCEPT     # Rule 1: Allow everything
+sudo iptables -A FORWARD -p tcp --dport 22 -j DROP  # Rule 2: Never reached!
+
+# Correct order:
+sudo iptables -I FORWARD 1 -p tcp --dport 22 -j DROP  # Rule 1: Block SSH
+sudo iptables -A FORWARD -j ACCEPT                     # Rule 2: Allow rest
+```
+
+**Use -I (insert) for specific blocks, -A (append) for catch-all rules.**
+
+#### **3. Make iptables Rules Persistent**
+
+**Rules are lost on reboot unless saved:**
+```bash
+# Save current rules
+sudo netfilter-persistent save
+
+# Or manually
+sudo iptables-save > /etc/iptables/rules.v4
+```
+
+**Test after reboot:**
+```bash
+sudo reboot
+# After reboot:
+sudo iptables -L -n -v  # Verify rules are still there
+```
+
+#### **4. Logging for Debugging**
+
+**Add logging to troubleshoot:**
+```bash
+sudo iptables -A FORWARD -j LOG --log-prefix "NVA-DEBUG: " --log-level 4
+
+# Watch logs:
+sudo tail -f /var/log/kern.log | grep NVA-DEBUG
+```
+
+**Warning:** Don't leave verbose logging in production (performance impact).
+
+### Terraform/IaC Best Practices
+
+#### **1. One Source of Truth**
+
+**The Problem:**
+- Created resource manually in Portal
+- Also defined in Terraform
+- Result: Conflicts, duplicate resources
+
+**The Solution:** Pick ONE:
+- **Option A:** Everything via Terraform (recommended for production)
+- **Option B:** Terraform for base infrastructure, Portal for testing/temporary changes
+- **Option C:** Hybrid - Clear documentation of what's managed where
+
+**This Lab:** We used hybrid approach:
+- Terraform: VNets, VMs, NSGs (foundational infrastructure)
+- Portal: Peerings, Route Tables (demonstration/learning)
+
+**For production:** 100% Terraform or other IaC tool.
+
+#### **2. Service Principal vs Azure CLI Auth**
+
+**What we learned:**
+
+**Azure CLI Auth:**
+- Easy for getting started
+- Requires `az` command in PATH
+- User's credentials
+- Not suitable for automation
+
+**Service Principal:**
+- No external dependencies
+- Explicit credentials
+- Can be scoped/restricted
+- **Better for CI/CD, team environments**
+
+**This lab taught:** Service Principal setup once, use everywhere.
+
+#### **3. Variable Management**
+
+**Security:**
+```hcl
+# Never commit secrets!
+terraform.tfvars  # Contains SSH keys, IPs - .gitignore this
+terraform.tfvars.example  # Safe template - commit this
+```
+
+**Best Practice:**
+```bash
+# In CI/CD: Use Azure Key Vault or environment variables
+# Locally: Use terraform.tfvars (gitignored)
+# Share with team: terraform.tfvars.example (sanitized)
+```
+
+#### **4. Terraform State Management**
+
+**Local State (what we used):**
+- Simple for learning
+- `terraform.tfstate` file in local directory
+- **Problem:** Can't collaborate, no locking
+
+**Production:** Use remote state:
+```hcl
+terraform {
+  backend "azurerm" {
+    resource_group_name  = "terraform-state-rg"
+    storage_account_name = "tfstatestore"
+    container_name       = "tfstate"
+    key                  = "vna-lab.tfstate"
+  }
+}
+```
+
+### Troubleshooting Best Practices
+
+#### **1. Systematic Debugging**
+
+**The approach that worked:**
+
+1. **Verify the expected behavior:** What SHOULD happen?
+2. **Test from outside-in:** 
+   - Can you reach VMs from internet? (Public IP)
+   - Can VMs reach each other? (Private IP)
+   - Is traffic going through NVA? (tcpdump)
+3. **Check each layer:**
+   - Azure routing (Effective Routes)
+   - Azure NIC (IP forwarding enabled?)
+   - OS config (IP forwarding in kernel?)
+   - iptables rules (correct chain/order?)
+4. **Use tcpdump liberally:** See what's actually happening vs what you think is happening
+
+#### **2. Common Gotchas**
+
+**Public IP Changes:**
+- Dynamic IPs change frequently
+- Always check: `curl ifconfig.me`
+- Update NSG rules or use static IP
+
+**Time-based Issues:**
+- Route table changes take 1-2 minutes to propagate
+- VNet peering takes 30-60 seconds to become "Connected"
+- **Don't assume instant changes!**
+
+**Both-Direction Configuration:**
+- Routes needed in both directions
+- VNet peerings are bidirectional (but need both created)
+- iptables rules for both source→dest and dest→source
+
+### Security Considerations
+
+#### **1. Principle of Least Privilege**
+
+**NSG Rules:**
+```bash
+# Bad: Allow from 0.0.0.0/0
+source_address_prefix = "0.0.0.0/0"
+
+# Good: Allow only from your IP
+source_address_prefix = "203.45.123.89/32"
+
+# Better: Allow from your organization's IP range
+source_address_prefix = "203.45.0.0/16"
+```
+
+#### **2. Public IPs - When to Use**
+
+**This lab:** Used public IPs for SSH convenience
+
+**Production alternatives:**
+- **Azure Bastion:** No public IPs on VMs, access via Azure Portal
+- **VPN Gateway:** Site-to-site or Point-to-site VPN
+- **ExpressRoute:** Private connection to Azure
+- **Jump Box:** One hardened VM with public IP, SSH through it
+
+#### **3. NVA Security**
+
+**The NVA is critical - secure it:**
+- ✅ Restrict SSH to known IPs only
+- ✅ Keep OS patched and updated
+- ✅ Monitor logs regularly
+- ✅ Use managed identity for Azure API access
+- ✅ Consider high availability (2+ NVAs with load balancer)
+
+### Cost Optimization
+
+**What we learned:**
+
+**VM Sizing:**
+- B1s ($7.50/month) sufficient for lab
+- B1ls ($3.80/month) cheaper but limited RAM
+- **Stop VMs when not using!**
+
+**Quick stop commands:**
+```bash
+# Stop all VMs (saves money)
+az vm deallocate --resource-group rg-vna-lab --name spoke1-vm --no-wait
+az vm deallocate --resource-group rg-vna-lab --name spoke2-vm --no-wait
+az vm deallocate --resource-group rg-vna-lab --name nva-vm --no-wait
+
+# Start when needed
+az vm start --resource-group rg-vna-lab --name spoke1-vm --no-wait
+az vm start --resource-group rg-vna-lab --name spoke2-vm --no-wait
+az vm start --resource-group rg-vna-lab --name nva-vm --no-wait
+```
+
+**Cost for 2-3 day lab:** ~$2-3 total if you stop VMs between sessions.
+
+### Production Considerations
+
+**If implementing this in production:**
+
+#### **1. High Availability**
+
+- Deploy 2+ NVAs in different availability zones
+- Use Azure Load Balancer for active-active
+- Or use Azure Route Server for BGP-based failover
+
+#### **2. Monitoring**
+
+- Send iptables logs to Azure Monitor/Log Analytics
+- Set up alerts for dropped packets
+- Monitor NVA CPU/memory
+- Use Network Watcher for flow logs
+
+#### **3. Performance**
+
+- Use accelerated networking on NIC
+- Use larger VM sizes (D-series, F-series)
+- Consider Azure Virtual WAN with secured virtual hub
+- Or Azure Firewall (managed NVA solution)
+
+#### **4. Automation**
+
+- Everything in Terraform/IaC
+- Automated testing (ping tests, connectivity checks)
+- CI/CD pipeline for changes
+- GitOps workflow
+
+### When to Use What
+
+**Use VNet Peering When:**
+- ✅ Simple connectivity needed
+- ✅ Low latency critical
+- ✅ No inspection requirements
+- ✅ Small number of VNets (< 5)
+- ✅ Trust between workloads
+
+**Use NVA When:**
+- ✅ Traffic inspection required
+- ✅ Compliance/regulatory requirements
+- ✅ Centralized security policies needed
+- ✅ Many VNets (hub-and-spoke scales better)
+- ✅ Zero-trust architecture
+- ✅ Need IDS/IPS capabilities
+
+**Consider Azure Firewall When:**
+- ✅ Want managed NVA solution
+- ✅ Integrated threat intelligence
+- ✅ Don't want to manage VMs
+- ✅ Budget allows (~$900/month)
+
+### Real-World Application
+
+**This lab demonstrates concepts used in:**
+
+**1. Enterprise Hub-and-Spoke:** Central IT controls security, business units get spoke VNets
+
+**2. Multi-tier Applications:** Web tier, app tier, database tier with controlled inter-tier traffic
+
+**3. Dev/Test/Prod Isolation:** Development can't reach production directly
+
+**4. Compliance Requirements:** Financial, healthcare industries requiring traffic inspection
+
+**5. Zero Trust Networks:** Inspect all traffic, even between trusted zones
+
+---
+
+**Next:** Cleanup & Cost Management
