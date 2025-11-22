@@ -1,0 +1,5 @@
+# Copy this file to terraform.tfvars and fill in your values
+# DO NOT commit terraform.tfvars (it contains secrets!)
+
+admin_ssh_key = "ssh-rsa AAAA...your-public-key-here..."
+my_public_ip  = "203.45.123.89/32"  # Your public IP for SSH access
